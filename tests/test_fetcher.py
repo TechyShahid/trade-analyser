@@ -1,92 +1,63 @@
-import sys
+import pytest
 from datetime import date
-from nse_data_fetcher.fetcher import fetch_stock_data, fetch_bulk_deal_data, fetch_block_deal_data
+import pandas as pd
+import sys
+import os
 
-def test_fetch_valid_data():
-    try:
-        data = fetch_stock_data("SBIN", date(2023, 6, 20), date(2023, 7, 20))
-        print("test_fetch_valid_data: PASSED")
-    except ValueError as ve:
-        print(f"test_fetch_valid_data: FAILED - {ve}")
-    except Exception as e:
-        print(f"test_fetch_valid_data: FAILED with unexpected exception {e}")
+# Add the project root directory to sys.path for imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-def test_fetch_invalid_symbol():
-    try:
-        data = fetch_stock_data("INVALIDSYM", date(2023, 1, 1), date(2023, 1, 10))
-        # Expecting empty dataframe or handled exception
-        if data.empty:
-            print("test_fetch_invalid_symbol: PASSED (empty data)")
-        else:
-            print("test_fetch_invalid_symbol: PASSED (data returned)")
-    except Exception as e:
-        print(f"test_fetch_invalid_symbol: PASSED (exception handled) - {e}")
+from nse_data_fetcher.fetcher import fetch_bulk_deal_summary
 
-def test_fetch_invalid_dates():
-    try:
-        data = fetch_stock_data("RELIANCE", date(2023, 1, 10), date(2023, 1, 1))
-        # Expecting empty dataframe or handled exception
-        if data.empty:
-            print("test_fetch_invalid_dates: PASSED (empty data)")
-        else:
-            print("test_fetch_invalid_dates: PASSED (data returned)")
-    except Exception as e:
-        print(f"test_fetch_invalid_dates: PASSED (exception handled) - {e}")
+def test_fetch_bulk_deal_summary_valid(monkeypatch):
+    # Sample data to mock fetch_bulk_deal_data
+    sample_data = pd.DataFrame({
+        'TradePrice/Wght.Avg.Price': ['250', '300', '150'],
+        'Symbol': ['AAA', 'BBB', 'CCC'],
+        'ClientName': ['Client1', 'Client2', 'Client3'],
+        'QuantityTraded': ['1,000', '2,000', '3,000'],
+        'Buy/Sell': ['BUY', 'SELL', 'BUY']
+    })
 
-def test_fetch_empty_symbol():
-    try:
-        data = fetch_stock_data("", date(2023, 1, 1), date(2023, 1, 10))
-        if data.empty:
-            print("test_fetch_empty_symbol: PASSED (empty data)")
-        else:
-            print("test_fetch_empty_symbol: FAILED - Expected empty data")
-    except Exception as e:
-        print(f"test_fetch_empty_symbol: PASSED (exception handled) - {e}")
+    def mock_fetch_bulk_deal_data(trade_date):
+        return sample_data
 
-def test_fetch_future_dates():
-    try:
-        data = fetch_stock_data("SBIN", date(2050, 1, 1), date(2050, 1, 10))
-        if data.empty:
-            print("test_fetch_future_dates: PASSED (empty data)")
-        else:
-            print("test_fetch_future_dates: FAILED - Expected empty data")
-    except Exception as e:
-        print(f"test_fetch_future_dates: PASSED (exception handled) - {e}")
+    monkeypatch.setattr('nse_data_fetcher.fetcher.fetch_bulk_deal_data', mock_fetch_bulk_deal_data)
 
-def test_fetch_large_date_range():
-    try:
-        data = fetch_stock_data("SBIN", date(2010, 1, 1), date(2023, 7, 20))
-        print("test_fetch_large_date_range: PASSED")
-    except ValueError as ve:
-        print(f"test_fetch_large_date_range: FAILED - {ve}")
-    except Exception as e:
-        print(f"test_fetch_large_date_range: FAILED with unexpected exception {e}")
+    trade_date = date(2023, 1, 1)
+    summary = fetch_bulk_deal_summary(trade_date)
 
-def test_fetch_bulk_deal_data():
-    try:
-        data = fetch_bulk_deal_data(date(2024, 6, 20))
-        print("test_fetch_bulk_deal_data: PASSED")
-    except ValueError as ve:
-        print(f"test_fetch_bulk_deal_data: FAILED - {ve}")
-    except Exception as e:
-        print(f"test_fetch_bulk_deal_data: FAILED with unexpected exception {e}")
+    # Check that only rows with price > 200 are included
+    assert 'CCC' not in summary['Symbol'].values  # 150 price filtered out
+    # Check that quantities are summed correctly
+    buy_qty = summary.loc[summary['ClientName'] == 'Client1', 'TotalBuyQuantity'].values[0]
+    sell_qty = summary.loc[summary['ClientName'] == 'Client2', 'TotalSellQuantity'].values[0]
+    assert buy_qty == 1000.0
+    assert sell_qty == 2000.0
 
-def test_fetch_block_deal_data():
-    try:
-        data = fetch_block_deal_data(date(2024, 6, 20))
-        print("test_fetch_block_deal_data: PASSED")
-    except ValueError as ve:
-        print(f"test_fetch_block_deal_data: FAILED - {ve}")
-    except Exception as e:
-        print(f"test_fetch_block_deal_data: FAILED with unexpected exception {e}")
+def test_fetch_bulk_deal_summary_no_data(monkeypatch):
+    def mock_fetch_bulk_deal_data(trade_date):
+        return pd.DataFrame(columns=['TradePrice/Wght.Avg.Price', 'Symbol', 'ClientName', 'QuantityTraded', 'Buy/Sell'])
 
-if __name__ == "__main__":
-    print("Running tests for nse_data_fetcher...")
-    test_fetch_valid_data()
-    test_fetch_invalid_symbol()
-    test_fetch_invalid_dates()
-    test_fetch_empty_symbol()
-    test_fetch_future_dates()
-    test_fetch_large_date_range()
-    test_fetch_bulk_deal_data()
-    test_fetch_block_deal_data()
+    monkeypatch.setattr('nse_data_fetcher.fetcher.fetch_bulk_deal_data', mock_fetch_bulk_deal_data)
+
+    trade_date = date(2023, 1, 1)
+    with pytest.raises(ValueError):
+        fetch_bulk_deal_summary(trade_date)
+
+def test_fetch_bulk_deal_summary_missing_columns(monkeypatch):
+    sample_data = pd.DataFrame({
+        'Symbol': ['AAA'],
+        'ClientName': ['Client1'],
+        'QuantityTraded': ['1000'],
+        'Buy/Sell': ['BUY']
+    })
+
+    def mock_fetch_bulk_deal_data(trade_date):
+        return sample_data
+
+    monkeypatch.setattr('nse_data_fetcher.fetcher.fetch_bulk_deal_data', mock_fetch_bulk_deal_data)
+
+    trade_date = date(2023, 1, 1)
+    with pytest.raises(ValueError):
+        fetch_bulk_deal_summary(trade_date)

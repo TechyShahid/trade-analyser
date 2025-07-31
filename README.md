@@ -26,12 +26,13 @@ The main module is `nse_data_fetcher/fetcher.py`. You can fetch historical stock
 - `fetch_stock_data(symbol, start_date, end_date)`
 - `fetch_bulk_deal_data(trade_date)`
 - `fetch_block_deal_data(trade_date)`
+- `fetch_bulk_deal_summary(trade_date)` - Fetches summarized bulk deal data filtered by TradePrice/Wght.Avg.Price > 200 and aggregates buy/sell quantities based on Buy/Sell column.
 
 Example:
 
 ```python
 from datetime import date
-from nse_data_fetcher.fetcher import fetch_stock_data
+from nse_data_fetcher.fetcher import fetch_stock_data, fetch_bulk_deal_summary
 
 symbol = "RELIANCE"
 start_date = date(2023, 1, 1)
@@ -39,6 +40,10 @@ end_date = date(2023, 12, 31)
 
 data = fetch_stock_data(symbol, start_date, end_date)
 print(data)
+
+trade_date = date(2025, 7, 22)
+summary = fetch_bulk_deal_summary(trade_date)
+print(summary)
 ```
 
 ## REST API
@@ -96,6 +101,19 @@ uvicorn nse_data_fetcher.api:app --reload
   http://127.0.0.1:8000/block-deals?trade_date=2023-07-22
   ```
 
+- **GET /bulk-deals-summary**
+
+  Fetch summarized bulk deal data filtered by TradePrice/Wght.Avg.Price > 200 and aggregated buy/sell quantities.
+
+  Query parameters:
+  - `trade_date` (string): Trade date in YYYY-MM-DD format
+
+  Example:
+
+  ```
+  http://127.0.0.1:8000/bulk-deals-summary?trade_date=2025-07-22
+  ```
+
 ### Notes
 
 - The API handles JSON serialization of special float values like NaN and infinite by converting them appropriately using pandas' built-in JSON serialization.
@@ -123,3 +141,12 @@ pip install -r requirements.txt
 ## License
 
 MIT License
+pip install -r requirements.txt
+  http://127.0.0.1:8000/bulk-deals-summary?trade_date=2025-07-22
+  http://127.0.0.1:8000/block-deals?trade_date=2023-07-22
+  http://127.0.0.1:8000/bulk-deals?trade_date=2023-07-22
+  http://127.0.0.1:8000/stock-data?symbol=RELIANCE&start_date=2023-01-01&end_date=2023-01-31
+uvicorn nse_data_fetcher.api:app --reload
+print(summary)
+pip install -r requirements.txt
+source venv/bin/activate  # On Windows use `venv\Scripts\activate`
